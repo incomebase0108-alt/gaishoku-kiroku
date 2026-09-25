@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useRef, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
-import { IconCamera } from '../components/icons'
+import { IconCamera, IconImage } from '../components/icons'
 import { Choice, Stars, TopBar, useToast } from '../components/ui'
 import { LastVisitCard } from '../components/VisitViews'
 import { AMOUNTS, GENRES, PHOTO_TYPES, PRICE_FEELS, WANT_AGAINS, labelOf, type PhotoType } from '../domain/enums'
@@ -13,6 +13,7 @@ import { DraftError, getLastVisitDetail, isDishEmpty, pastDishNames, saveDraft }
 import { processPhoto, requestPersist } from '../services/photoStorage'
 
 type PhotoTarget = { dishId: string } | { visitType: PhotoType }
+type PhotoSource = 'camera' | 'library' // camera＝すぐカメラが起動／library＝写真・コレクションから選ぶ
 
 function DraftThumb({ photo, onDelete }: { photo: DraftPhoto; onDelete: () => void }) {
   const url = useBufferUrl(photo.thumb, photo.mime)
@@ -44,7 +45,7 @@ function DishCard({
   busy: boolean
   onChange: (patch: Partial<DraftDish>) => void
   onDelete: () => void
-  onAddPhoto: () => void
+  onAddPhoto: (source: PhotoSource) => void
 }) {
   const [memoOpen, setMemoOpen] = useState(dish.memo !== '')
   const listId = `names-${dish.id}`
@@ -60,19 +61,30 @@ function DishCard({
       </div>
 
       {dish.photos.length === 0 ? (
-        <button type="button" className="add-photo wide" onClick={onAddPhoto} disabled={busy}>
-          <IconCamera />
-          {busy ? '写真を読み込み中…' : '写真を撮る・選ぶ'}
-        </button>
+        <>
+          <button type="button" className="add-photo wide" onClick={() => onAddPhoto('camera')} disabled={busy}>
+            <IconCamera />
+            {busy ? '写真を読み込み中…' : 'カメラで撮る'}
+          </button>
+          <button type="button" className="btn block pick-lib" onClick={() => onAddPhoto('library')} disabled={busy}>
+            <IconImage /> 写真から選ぶ
+          </button>
+        </>
       ) : (
         <div className="photo-strip">
           {dish.photos.map((p) => (
             <DraftThumb key={p.id} photo={p} onDelete={() => onChange({ photos: dish.photos.filter((x) => x.id !== p.id) })} />
           ))}
-          <button type="button" className="add-photo" onClick={onAddPhoto} disabled={busy}>
-            <IconCamera />
-            {busy ? '読み込み中' : '追加'}
-          </button>
+          <div className="add-pair">
+            <button type="button" className="add-photo" onClick={() => onAddPhoto('camera')} disabled={busy} aria-label="カメラでもう1枚撮る">
+              <IconCamera />
+              {busy ? '読み込み中' : '撮る'}
+            </button>
+            <button type="button" className="add-photo lib" onClick={() => onAddPhoto('library')} disabled={busy} aria-label="写真から追加する">
+              <IconImage />
+              選ぶ
+            </button>
+          </div>
         </div>
       )}
 
@@ -145,7 +157,8 @@ export function RecordForm() {
   const [error, setError] = useState<string | null>(null)
   const [genreOpen, setGenreOpen] = useState(false)
   const [toast, showToast] = useToast()
-  const fileInput = useRef<HTMLInputElement>(null)
+  const cameraInput = useRef<HTMLInputElement>(null)
+  const libraryInput = useRef<HTMLInputElement>(null)
   const target = useRef<PhotoTarget | null>(null)
   const finished = useRef(false)
 
@@ -191,9 +204,9 @@ export function RecordForm() {
     showToast(`「${d.name}」を入れました`)
   }
 
-  const pickPhoto = (t: PhotoTarget) => {
+  const pickPhoto = (t: PhotoTarget, source: PhotoSource) => {
     target.current = t
-    fileInput.current?.click()
+    ;(source === 'camera' ? cameraInput : libraryInput).current?.click()
   }
 
   const onFiles = async (files: FileList | null) => {
@@ -217,7 +230,7 @@ export function RecordForm() {
       setError('写真を読み込めませんでした。別の写真で試してください')
     } finally {
       setBusy(null)
-      if (fileInput.current) fileInput.current.value = ''
+      for (const r of [cameraInput, libraryInput]) if (r.current) r.current.value = ''
     }
   }
 
@@ -259,7 +272,9 @@ export function RecordForm() {
         }
       />
 
-      <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={(e) => onFiles(e.target.files)} />
+      {/* capture を付けると、選ぶ画面を出さずにすぐカメラが起動する（iPhone・Android とも） */}
+      <input ref={cameraInput} type="file" accept="image/*" capture="environment" hidden onChange={(e) => onFiles(e.target.files)} />
+      <input ref={libraryInput} type="file" accept="image/*" multiple hidden onChange={(e) => onFiles(e.target.files)} />
 
       <div className="card" style={{ marginBottom: 12 }}>
         <div className="store-head">
@@ -316,7 +331,7 @@ export function RecordForm() {
           onDelete={() => {
             if (isDishEmpty(d) || window.confirm(`${i + 1}品目を外しますか？`)) up({ dishes: draft.dishes.filter((x) => x.id !== d.id) })
           }}
-          onAddPhoto={() => pickPhoto({ dishId: d.id })}
+          onAddPhoto={(source) => pickPhoto({ dishId: d.id }, source)}
         />
       ))}
       <button type="button" className="btn block" style={{ borderStyle: 'dashed', borderColor: 'var(--ai)', color: 'var(--ai)' }} onClick={() => addDish()}>
@@ -385,11 +400,14 @@ export function RecordForm() {
           )}
           <div className="row">
             {(['exterior', 'menu', 'receipt'] as const).map((t) => (
-              <button key={t} type="button" className="btn" style={{ padding: 0 }} disabled={busy === 'visit'} onClick={() => pickPhoto({ visitType: t })}>
-                {labelOf(PHOTO_TYPES, t)}
+              <button key={t} type="button" className="btn" style={{ padding: 0 }} disabled={busy === 'visit'} onClick={() => pickPhoto({ visitType: t }, 'camera')}>
+                <IconCamera /> {labelOf(PHOTO_TYPES, t)}
               </button>
             ))}
           </div>
+          <button type="button" className="toggle-link" disabled={busy === 'visit'} onClick={() => pickPhoto({ visitType: 'other' }, 'library')}>
+            ＋ 写真から選ぶ
+          </button>
         </div>
         <div className="field" style={{ marginBottom: 0 }}>
           <label htmlFor="memo">メモ</label>

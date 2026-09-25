@@ -36,7 +36,10 @@ async function newPage(ctx) {
 const shot = (page, name, full = false) => page.screenshot({ path: `${OUT}/${name}.png`, fullPage: full })
 async function addPhoto(page, button) {
   const [chooser] = await Promise.all([page.waitForEvent('filechooser'), button.click()])
+  const el = chooser.element()
+  const how = { capture: await el.getAttribute('capture'), multiple: chooser.isMultiple() }
   await chooser.setFiles(PHOTO)
+  return how
 }
 const card = (page, n) => page.locator('.dish-card').nth(n)
 
@@ -53,8 +56,13 @@ await page.getByRole('button', { name: '「麺屋 一」を新しい店として
 await page.waitForURL(/record\/form/)
 await page.getByRole('button', { name: 'ラーメン', exact: true }).click()
 
-await addPhoto(page, card(page, 0).getByRole('button', { name: '写真を撮る・選ぶ' }))
+const cam = await addPhoto(page, card(page, 0).getByRole('button', { name: 'カメラで撮る' }))
+check('「カメラで撮る」はすぐカメラが起動する指定（capture=environment）', cam.capture === 'environment' && !cam.multiple, JSON.stringify(cam))
 await card(page, 0).locator('.photo-strip img').first().waitFor()
+const lib = await addPhoto(page, card(page, 0).getByRole('button', { name: '写真から追加する' }))
+check('「選ぶ」は写真・コレクションから（capture なし・複数可）', lib.capture === null && lib.multiple, JSON.stringify(lib))
+await card(page, 0).locator('.photo-strip img').nth(1).waitFor()
+await card(page, 0).getByRole('button', { name: 'この写真を外す' }).nth(1).click()
 await card(page, 0).getByLabel('品名').fill('醤油ラーメン')
 await card(page, 0).getByRole('radio', { name: '★4' }).click()
 await card(page, 0).getByRole('button', { name: 'ちょうどいい' }).click()
