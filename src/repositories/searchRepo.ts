@@ -7,13 +7,14 @@ import { byRecent } from './visitRepo'
 export interface SearchFilters {
   q: string // 店名・料理名のどちらにも当てる
   genre: string // '' なら問わない
+  city: string // '' なら問わない
   minRating: number // 0 なら問わない。料理は味、店は前回の総合評価に当てる
   amounts: Amount[] // 空なら問わない
   prices: PriceFeel[]
   wants: WantAgain[]
 }
 
-export const EMPTY_FILTERS: SearchFilters = { q: '', genre: '', minRating: 0, amounts: [], prices: [], wants: [] }
+export const EMPTY_FILTERS: SearchFilters = { q: '', genre: '', city: '', minRating: 0, amounts: [], prices: [], wants: [] }
 
 export function hasDishFilters(f: SearchFilters): boolean {
   return f.amounts.length > 0 || f.prices.length > 0 || f.wants.length > 0
@@ -32,6 +33,11 @@ export interface RestaurantHit {
   visitCount: number
   matchedDishes: string[] // 条件に合った料理名（料理の条件や料理名で当たったとき）
   photoId: string | null
+}
+
+// キーワードは店名と市のどちらにも当てる（「名古屋」で名古屋市の店が出る）
+function storeText(r: Restaurant): string {
+  return norm(`${r.name} ${r.city ?? ''}`)
 }
 
 async function loadAll() {
@@ -62,8 +68,9 @@ export async function searchDishes(f: SearchFilters): Promise<DishHit[]> {
     const v = vmap.get(d.visit_id)
     const r = v && rmap.get(v.restaurant_id)
     if (!v || !r) continue
-    if (q && !norm(d.name).includes(q) && !norm(r.name).includes(q)) continue
+    if (q && !norm(d.name).includes(q) && !storeText(r).includes(q)) continue
     if (f.genre && r.genre !== f.genre) continue
+    if (f.city && r.city !== f.city) continue
     if (f.minRating && (d.taste_rating ?? 0) < f.minRating) continue
     if (!dishMatchesChoices(d, f)) continue
     const photo = photos.find((p) => p.dish_id === d.id)
@@ -80,12 +87,13 @@ export async function searchRestaurants(f: SearchFilters): Promise<RestaurantHit
   const hits: RestaurantHit[] = []
   for (const r of restaurants) {
     if (f.genre && r.genre !== f.genre) continue
+    if (f.city && r.city !== f.city) continue
     const vs = visits.filter((v) => v.restaurant_id === r.id).sort(byRecent)
     const last = vs[0] ?? null
     if (f.minRating && (last?.overall_rating ?? 0) < f.minRating) continue
     const vIds = new Set(vs.map((v) => v.id))
     const ds = dishes.filter((d) => vIds.has(d.visit_id))
-    const nameHit = !q || norm(r.name).includes(q)
+    const nameHit = !q || storeText(r).includes(q)
     const matched = ds.filter((d) => (nameHit || norm(d.name).includes(q)) && dishMatchesChoices(d, f))
     if (!nameHit && matched.length === 0) continue
     if (dishFilter && matched.length === 0) continue

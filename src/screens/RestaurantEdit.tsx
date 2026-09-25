@@ -3,18 +3,19 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { TopBar } from '../components/ui'
 import { GENRES } from '../domain/enums'
-import { deleteRestaurant, getRestaurant, updateRestaurant } from '../repositories/restaurantRepo'
+import { deleteRestaurant, getRestaurant, updateRestaurant, usedCities } from '../repositories/restaurantRepo'
 
 export function RestaurantEdit() {
   const { id = '' } = useParams()
   const nav = useNavigate()
   const r = useLiveQuery(() => getRestaurant(id), [id])
-  const [form, setForm] = useState({ name: '', genre: '', address: '', memo: '' })
+  const cities = useLiveQuery(usedCities, [])
+  const [form, setForm] = useState({ name: '', genre: '', city: '', address: '', memo: '' })
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
     if (r && !loaded) {
-      setForm({ name: r.name, genre: r.genre, address: r.address, memo: r.memo })
+      setForm({ name: r.name, genre: r.genre, city: r.city ?? '', address: r.address, memo: r.memo })
       setLoaded(true)
     }
   }, [r, loaded])
@@ -23,7 +24,7 @@ export function RestaurantEdit() {
 
   const save = async () => {
     if (!form.name.trim()) return
-    await updateRestaurant(id, { name: form.name.trim(), genre: form.genre, address: form.address.trim(), memo: form.memo.trim() })
+    await updateRestaurant(id, { name: form.name.trim(), genre: form.genre, city: form.city.trim(), address: form.address.trim(), memo: form.memo.trim() })
     nav(-1)
   }
 
@@ -49,6 +50,15 @@ export function RestaurantEdit() {
             </button>
           ))}
         </div>
+      </div>
+      <div className="field">
+        <label htmlFor="r-city">市（〇〇市・〇〇区など）</label>
+        <input id="r-city" className="input" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} placeholder="例：名古屋市" list="r-city-list" autoComplete="off" />
+        <datalist id="r-city-list">
+          {(cities ?? []).map((c) => (
+            <option key={c} value={c} />
+          ))}
+        </datalist>
       </div>
       <div className="field">
         <label htmlFor="r-addr">場所（任意）</label>

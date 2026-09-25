@@ -62,7 +62,7 @@ export async function getRestaurant(id: string): Promise<Restaurant | undefined>
 
 export async function updateRestaurant(
   id: string,
-  patch: Partial<Pick<Restaurant, 'name' | 'genre' | 'address' | 'memo'>>,
+  patch: Partial<Pick<Restaurant, 'name' | 'genre' | 'city' | 'address' | 'memo'>>,
 ): Promise<void> {
   await db.restaurants.update(id, { ...patch, updated_at: Date.now() })
 }
@@ -134,4 +134,10 @@ export async function listDishSummaries(restaurantId: string): Promise<DishSumma
     })
   }
   return out.sort((a, b) => b.lastVisitedAt - a.lastVisitedAt || b.count - a.count)
+}
+
+// これまでに入れた市（最近行った店の市から順に）。入力の候補と検索の絞り込みに使う
+export async function usedCities(): Promise<string[]> {
+  const list = await listRestaurantSummaries()
+  return [...new Set(list.map((s) => (s.restaurant.city ?? '').trim()).filter((c) => c))]
 }

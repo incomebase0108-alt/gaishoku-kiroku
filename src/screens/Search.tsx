@@ -5,6 +5,7 @@ import { MultiChoice, Stars, Thumb, TopBar, WantStamp } from '../components/ui'
 import { DishMeta } from '../components/VisitViews'
 import { AMOUNTS, GENRES, PRICE_FEELS, WANT_AGAINS } from '../domain/enums'
 import { fmtAgo, fmtDate } from '../lib/util'
+import { usedCities } from '../repositories/restaurantRepo'
 import { EMPTY_FILTERS, searchDishes, searchRestaurants, usedGenres, type SearchFilters } from '../repositories/searchRepo'
 
 type Tab = 'store' | 'dish'
@@ -15,11 +16,12 @@ export function Search() {
   const [f, setF] = useState<SearchFilters>(EMPTY_FILTERS)
   const [open, setOpen] = useState(false)
   const genres = useLiveQuery(usedGenres, []) ?? []
+  const cities = useLiveQuery(usedCities, []) ?? []
   const stores = useLiveQuery(() => (tab === 'store' ? searchRestaurants(f) : null), [tab, f])
   const dishes = useLiveQuery(() => (tab === 'dish' ? searchDishes(f) : null), [tab, f])
 
   const set = (patch: Partial<SearchFilters>) => setF((x) => ({ ...x, ...patch }))
-  const active = f.genre !== '' || f.minRating > 0 || f.amounts.length + f.prices.length + f.wants.length > 0
+  const active = f.genre !== '' || f.city !== '' || f.minRating > 0 || f.amounts.length + f.prices.length + f.wants.length > 0
   const count = tab === 'store' ? stores?.length : dishes?.length
   const genreList = [...new Set([...genres, ...GENRES.filter((g) => genres.includes(g))])]
 
@@ -40,7 +42,7 @@ export function Search() {
         type="search"
         value={f.q}
         onChange={(e) => set({ q: e.target.value })}
-        placeholder={tab === 'store' ? '店名・料理名で探す' : '料理名・店名で探す'}
+        placeholder={tab === 'store' ? '店名・料理名・市で探す' : '料理名・店名・市で探す'}
         aria-label="キーワード"
         enterKeyHint="search"
       />
@@ -56,6 +58,17 @@ export function Search() {
           </button>
         )}
       </div>
+
+      {/* 市はよく使うので、絞り込みを開かなくても押せるように外に出す */}
+      {cities.length > 0 && (
+        <div className="chips scroll" role="group" aria-label="市" style={{ marginTop: 8 }}>
+          {cities.map((c) => (
+            <button key={c} type="button" className="chip" aria-pressed={f.city === c} onClick={() => set({ city: f.city === c ? '' : c })}>
+              {c}
+            </button>
+          ))}
+        </div>
+      )}
 
       {open && (
         <div className="card card-pad">
@@ -107,6 +120,7 @@ export function Search() {
                 <div className="title">{h.restaurant.name}</div>
                 <div className="sub">
                   {h.restaurant.genre && <span className="tag">{h.restaurant.genre}</span>}{' '}
+                  {h.restaurant.city && `${h.restaurant.city}・`}
                   {h.lastVisit ? `${fmtAgo(h.lastVisit.visited_at)}・${h.visitCount}回` : '記録なし'}
                 </div>
                 {h.matchedDishes.length > 0 && <div className="dishes">{h.matchedDishes.join('、')}</div>}
@@ -126,7 +140,7 @@ export function Search() {
               <div className="body">
                 <div className="title">{h.dish.name || '（品名なし）'}</div>
                 <div className="sub">
-                  {h.restaurant.name}・{fmtDate(h.visit.visited_at)}
+                  {h.restaurant.name}{h.restaurant.city && `（${h.restaurant.city}）`}・{fmtDate(h.visit.visited_at)}
                 </div>
                 <DishMeta dish={h.dish} />
               </div>

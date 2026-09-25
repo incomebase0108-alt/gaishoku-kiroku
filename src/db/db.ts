@@ -11,6 +11,7 @@ export class AppDB extends Dexie {
   photoFiles!: EntityTable<PhotoFile, 'id'>
   drafts!: EntityTable<DraftRow, 'key'>
 
+  // DB の名前は変えない（変えると、使っている人の記録が見えなくなる）
   constructor(name = 'gaishoku-kiroku') {
     super(name)
     // 列を足すときは version(2) を追加し、ここは書き換えない
@@ -22,6 +23,17 @@ export class AppDB extends Dexie {
       photoFiles: 'id',
       drafts: 'key',
     })
+    // v2：店に市（city）を足した。今までの店は空欄で入る
+    this.version(2)
+      .stores({ restaurants: 'id, name, genre, city, updated_at' })
+      .upgrade((tx) =>
+        tx
+          .table('restaurants')
+          .toCollection()
+          .modify((r) => {
+            if (typeof r.city !== 'string') r.city = ''
+          }),
+      )
   }
 }
 

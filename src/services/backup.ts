@@ -8,6 +8,7 @@ import type { Dish, Photo, PhotoFile, Restaurant, Visit } from '../domain/types'
 //   thumbs/<id>.jpg         … 写真（一覧用の小）
 // iPhone と Android の間でも同じ形式で移せる。
 
+// 形式の名前は変えない（アプリ名を変える前のバックアップも読めるように）
 export const BACKUP_FORMAT = 'gaishoku-kiroku-backup'
 export const BACKUP_VERSION = 1
 
@@ -83,7 +84,7 @@ export async function buildBackupZip(now = Date.now()): Promise<{ bytes: Uint8Ar
 export function backupFileName(now = Date.now()): string {
   const d = new Date(now)
   const p = (n: number) => String(n).padStart(2, '0')
-  return `gaishoku-backup-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.zip`
+  return `shokureki-backup-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.zip`
 }
 
 export function parseBackup(bytes: Uint8Array): ParsedBackup {
@@ -133,7 +134,8 @@ export async function importBackup(parsed: ParsedBackup): Promise<void> {
   // 画像の中身が無い写真の行は入れない（一覧で空の枠になるため）
   const photos = data.photos.filter((p) => fileIds.has(p.image_path))
   await db.transaction('rw', [db.restaurants, db.visits, db.dishes, db.photos, db.photoFiles], async () => {
-    await db.restaurants.bulkPut(data.restaurants)
+    // 市を足す前のバックアップには city が無いので空欄で入れる
+    await db.restaurants.bulkPut(data.restaurants.map((r) => ({ ...r, city: r.city ?? '' })))
     await db.visits.bulkPut(data.visits)
     await db.dishes.bulkPut(data.dishes)
     await db.photoFiles.bulkPut(files)

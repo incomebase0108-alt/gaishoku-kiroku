@@ -12,8 +12,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon-180x180.png'],
       manifest: {
-        name: '外食きろく',
-        short_name: '外食きろく',
+        name: '食歴',
+        short_name: '食歴',
         description: '外食の「前回なに食べた？」がすぐ分かる記録アプリ',
         lang: 'ja',
         start_url: './',

@@ -1,5 +1,5 @@
 import { db } from '../db/db'
-import type { Dish, DraftDish, DraftPhoto, Photo, Visit, VisitDetail, VisitDraft } from '../domain/types'
+import type { Dish, DraftDish, DraftPhoto, Photo, Restaurant, Visit, VisitDetail, VisitDraft } from '../domain/types'
 import { newId, norm } from '../lib/util'
 
 // 新しい順。同じ時刻なら後から登録した方を新しいとみなす
@@ -108,17 +108,22 @@ export async function saveDraft(draft: VisitDraft): Promise<{ visitId: string; r
   const now = Date.now()
 
   return db.transaction('rw', [db.restaurants, db.visits, db.dishes, db.photos, db.photoFiles], async () => {
-    // 店：ID があればそれ、無ければ同じ名前の店を探し、無ければ作る（重複登録を防ぐ）
+    // 店：ID があればそれ、無ければ同じ名前・同じ市の店を探し、無ければ作る（重複登録を防ぐ）。
+    // 市が違えば別の店（チェーン店の支店を分けるため）
+    const genre = draft.restaurant.genre.trim()
+    const city = (draft.restaurant.city ?? '').trim()
     let restaurant = draft.restaurant.id ? await db.restaurants.get(draft.restaurant.id) : undefined
     if (!restaurant) {
       const key = norm(name)
-      restaurant = (await db.restaurants.toArray()).find((r) => norm(r.name) === key)
+      const ckey = norm(city)
+      restaurant = (await db.restaurants.toArray()).find((r) => norm(r.name) === key && norm(r.city ?? '') === ckey)
     }
     if (!restaurant) {
       restaurant = {
         id: newId(),
         name,
-        genre: draft.restaurant.genre.trim(),
+        genre,
+        city,
         address: '',
         latitude: null,
         longitude: null,
@@ -127,8 +132,12 @@ export async function saveDraft(draft: VisitDraft): Promise<{ visitId: string; r
         updated_at: now,
       }
       await db.restaurants.add(restaurant)
-    } else if (draft.restaurant.genre.trim() && draft.restaurant.genre.trim() !== restaurant.genre) {
-      await db.restaurants.update(restaurant.id, { genre: draft.restaurant.genre.trim(), updated_at: now })
+    } else {
+      // 記録の画面で入れ直したジャンル・市は店にも反映する（空にしたときは消さない）
+      const patch: Partial<Restaurant> = {}
+      if (genre && genre !== restaurant.genre) patch.genre = genre
+      if (city && city !== restaurant.city) patch.city = city
+      if (Object.keys(patch).length) await db.restaurants.update(restaurant.id, { ...patch, updated_at: now })
     }
 
     const prev = draft.editingVisitId ? await db.visits.get(draft.editingVisitId) : undefined
@@ -219,7 +228,7 @@ export async function visitToDraft(id: string): Promise<VisitDraft | null> {
   const { visit, restaurant, dishes, photos } = detail
   return {
     editingVisitId: visit.id,
-    restaurant: { id: restaurant.id, name: restaurant.name, genre: restaurant.genre },
+    restaurant: { id: restaurant.id, name: restaurant.name, genre: restaurant.genre, city: restaurant.city ?? '' },
     visited_at: visit.visited_at,
     people_count: visit.people_count,
     total_price: visit.total_price,

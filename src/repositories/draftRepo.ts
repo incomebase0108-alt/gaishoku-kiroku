@@ -1,5 +1,5 @@
 import { db } from '../db/db'
-import type { DraftDish, VisitDraft } from '../domain/types'
+import type { DraftDish, Restaurant, VisitDraft } from '../domain/types'
 import { newId } from '../lib/util'
 import { isDishEmpty } from './visitRepo'
 
@@ -19,6 +19,15 @@ export function emptyDish(): DraftDish {
     memo: '',
     photos: [],
   }
+}
+
+// 登録済みの店を下書きの「店」に
+export function storeOf(r: Restaurant): VisitDraft['restaurant'] {
+  return { id: r.id, name: r.name, genre: r.genre, city: r.city ?? '' }
+}
+
+export function newStore(name: string): VisitDraft['restaurant'] {
+  return { id: null, name: name.trim(), genre: '', city: '' }
 }
 
 export function newDraft(restaurant: VisitDraft['restaurant'], now = Date.now()): VisitDraft {
@@ -52,7 +61,8 @@ export async function loadDraft(): Promise<VisitDraft | null> {
   const row = await db.drafts.get(KEY)
   if (!row) return null
   const { key: _key, ...draft } = row
-  return draft
+  // 市を足す前に保存された下書きにも city を入れておく
+  return { ...draft, restaurant: { ...draft.restaurant, city: draft.restaurant.city ?? '' } }
 }
 
 export async function saveDraftState(draft: VisitDraft): Promise<void> {

@@ -7,6 +7,7 @@ import { Stars, Thumb, TopBar, WantStamp, useToast } from '../components/ui'
 import { DishMeta, LastVisitCard, VisitRow } from '../components/VisitViews'
 import { fmtAgo, fmtDate } from '../lib/util'
 import { getRestaurant, listDishSummaries } from '../repositories/restaurantRepo'
+import { storeOf } from '../repositories/draftRepo'
 import { listVisitsOfRestaurant } from '../repositories/visitRepo'
 import { startDraft } from './RecordPick'
 
@@ -42,7 +43,7 @@ export function RestaurantDetail() {
   const photoIds = visits.flatMap((v) => v.photos.map((p) => p.image_path))
 
   const record = async () => {
-    if (await startDraft({ id: restaurant.id, name: restaurant.name, genre: restaurant.genre })) nav('/record/form')
+    if (await startDraft(storeOf(restaurant))) nav('/record/form')
   }
 
   return (
@@ -57,6 +58,7 @@ export function RestaurantDetail() {
       <h1 className="store-title">{restaurant.name}</h1>
       <div className="meta">
         {restaurant.genre && <span className="tag">{restaurant.genre}</span>}
+        {restaurant.city && <span>{restaurant.city}</span>}
         {restaurant.address && <span>{restaurant.address}</span>}
       </div>
       {restaurant.memo && <p className="small pre">{restaurant.memo}</p>}

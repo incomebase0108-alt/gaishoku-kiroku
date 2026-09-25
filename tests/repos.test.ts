@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { db } from '../src/db/db'
+import Dexie from 'dexie'
+import { AppDB, db } from '../src/db/db'
 import type { DraftPhoto, VisitDraft } from '../src/domain/types'
 import { newId } from '../src/lib/util'
 import { emptyDish, newDraft } from '../src/repositories/draftRepo'
@@ -14,6 +15,8 @@ import {
   visitToDraft,
 } from '../src/repositories/visitRepo'
 import { buildBackupZip, parseBackup, importBackup, BackupError } from '../src/services/backup'
+import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
+import { usedCities } from '../src/repositories/restaurantRepo'
 
 const DAY = 86400000
 const T0 = new Date(2026, 8, 1, 12, 0).getTime()
@@ -36,7 +39,7 @@ function draft(
   dishes: Partial<VisitDraft['dishes'][number]>[],
   extra: Partial<VisitDraft> = {},
 ): VisitDraft {
-  const d = newDraft({ id: null, name, genre: 'ラーメン' }, at)
+  const d = newDraft({ id: null, name, genre: 'ラーメン', city: '' }, at)
   d.dishes = dishes.map((x) => ({ ...emptyDish(), ...x }))
   return { ...d, ...extra }
 }
@@ -251,5 +254,91 @@ describe('バックアップ', () => {
 
   it('関係ないファイルは読み込まない', () => {
     expect(() => parseBackup(new Uint8Array([1, 2, 3]))).toThrow(BackupError)
+  })
+})
+
+function inCity(name: string, city: string, at: number, dishes: Partial<VisitDraft['dishes'][number]>[]): VisitDraft {
+  const d = draft(name, at, dishes)
+  d.restaurant.city = city
+  return d
+}
+
+describe('市', () => {
+  it('同じ名前でも市が違えば別の店、同じ市なら同じ店', async () => {
+    const a = await saveDraft(inCity('スシロー', '名古屋市', T0, [{ name: 'まぐろ' }]))
+    const b = await saveDraft(inCity('スシロー', '豊橋市', T0 + DAY, [{ name: 'えび' }]))
+    const c = await saveDraft(inCity('スシロー', '名古屋市', T0 + 2 * DAY, [{ name: 'いか' }]))
+    expect(b.restaurantId).not.toBe(a.restaurantId)
+    expect(c.restaurantId).toBe(a.restaurantId)
+    expect(await db.restaurants.count()).toBe(2)
+  })
+
+  it('市が空の店に、次の記録で入れた市が入る（空で上書きはしない）', async () => {
+    const a = await saveDraft(draft('店', T0, [{ name: 'x' }]))
+    const d2 = draft('店', T0 + DAY, [{ name: 'y' }])
+    d2.restaurant = { id: a.restaurantId, name: '店', genre: '', city: '岡崎市' }
+    await saveDraft(d2)
+    expect((await db.restaurants.get(a.restaurantId))!.city).toBe('岡崎市')
+    const d3 = draft('店', T0 + 2 * DAY, [{ name: 'z' }])
+    d3.restaurant = { id: a.restaurantId, name: '店', genre: '', city: '' }
+    await saveDraft(d3)
+    expect((await db.restaurants.get(a.restaurantId))!.city).toBe('岡崎市')
+  })
+
+  it('市で絞り込める・キーワードは市にも当たる', async () => {
+    await saveDraft(inCity('喫茶A', '名古屋市', T0, [{ name: 'モーニング' }]))
+    await saveDraft(inCity('喫茶B', '豊橋市', T0 + DAY, [{ name: 'モーニング' }]))
+    const stores = async (f: Partial<typeof EMPTY_FILTERS>) =>
+      (await searchRestaurants({ ...EMPTY_FILTERS, ...f })).map((h) => h.restaurant.name)
+    expect(await stores({ city: '名古屋市' })).toEqual(['喫茶A'])
+    expect(await stores({ q: '豊橋' })).toEqual(['喫茶B'])
+    const dishes = async (f: Partial<typeof EMPTY_FILTERS>) =>
+      (await searchDishes({ ...EMPTY_FILTERS, ...f })).map((h) => h.restaurant.name)
+    expect(await dishes({ city: '豊橋市' })).toEqual(['喫茶B'])
+    expect(await dishes({ q: 'なごや' })).toEqual([])
+    expect(await dishes({ q: '名古屋' })).toEqual(['喫茶A'])
+    expect(await usedCities()).toEqual(['豊橋市', '名古屋市'])
+  })
+})
+
+describe('今までの記録を引き継ぐ', () => {
+  it('市を足す前（v1）の DB を新しい版で開いても記録が残り、市は空欄になる', async () => {
+    const name = 'migrate-test'
+    const old = new Dexie(name)
+    old.version(1).stores({
+      restaurants: 'id, name, genre, updated_at',
+      visits: 'id, restaurant_id, visited_at, [restaurant_id+visited_at]',
+      dishes: 'id, visit_id, name',
+      photos: 'id, visit_id, dish_id',
+      photoFiles: 'id',
+      drafts: 'key',
+    })
+    await old.table('restaurants').add({ id: 'r1', name: '旧い店', genre: '和食', address: '', latitude: null, longitude: null, memo: '', created_at: 1, updated_at: 1 })
+    await old.table('visits').add({ id: 'v1', restaurant_id: 'r1', visited_at: T0, people_count: 1, total_price: 800, overall_rating: 4, memo: '', created_at: 1, updated_at: 1 })
+    old.close()
+
+    const fresh = new AppDB(name)
+    const r = await fresh.restaurants.get('r1')
+    expect(r).toMatchObject({ name: '旧い店', genre: '和食', city: '' })
+    expect(await fresh.visits.get('v1')).toMatchObject({ total_price: 800 })
+    expect(await fresh.restaurants.where('city').equals('').count()).toBe(1)
+    fresh.close()
+    await Dexie.delete(name)
+  })
+
+  it('市を足す前のバックアップも読み込め、市は空欄になる', async () => {
+    await saveDraft(draft('店', T0, [{ name: 'x' }]))
+    const { bytes } = await buildBackupZip()
+    // 市の列が無い古いバックアップを作る
+    const entries = unzipSync(bytes)
+    const data = JSON.parse(strFromU8(entries['data.json']))
+    for (const r of data.restaurants) delete r.city
+    entries['data.json'] = strToU8(JSON.stringify(data))
+    const oldZip = zipSync(entries)
+    await Promise.all(db.tables.map((t) => t.clear()))
+    await importBackup(parseBackup(oldZip))
+    const r = (await db.restaurants.toArray())[0]
+    expect(r.city).toBe('')
+    expect(r.name).toBe('店')
   })
 })

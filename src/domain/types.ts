@@ -6,6 +6,7 @@ export interface Restaurant {
   id: string
   name: string
   genre: string
+  city: string // 〇〇市・〇〇区など。空なら未入力
   address: string
   latitude: number | null
   longitude: number | null
@@ -91,7 +92,7 @@ export interface DraftDish {
 
 export interface VisitDraft {
   editingVisitId: string | null
-  restaurant: { id: string | null; name: string; genre: string }
+  restaurant: { id: string | null; name: string; genre: string; city: string }
   visited_at: number
   people_count: number
   total_price: number | null

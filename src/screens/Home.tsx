@@ -27,7 +27,7 @@ export function Home() {
 
   return (
     <div className="page">
-      <div className="brand">外食きろく</div>
+      <div className="brand">食歴</div>
 
       {draft && (
         <div className="notice">
@@ -114,7 +114,7 @@ export function Home() {
             <div className="body">
               <div className="title">{s.restaurant.name}</div>
               <div className="sub">
-                {s.restaurant.genre && <span className="tag">{s.restaurant.genre}</span>} {fmtDate(s.lastVisit!.visited_at)}（{fmtAgo(s.lastVisit!.visited_at)}）・{s.visitCount}回
+                {s.restaurant.genre && <span className="tag">{s.restaurant.genre}</span>} {s.restaurant.city && `${s.restaurant.city}・`}{fmtDate(s.lastVisit!.visited_at)}（{fmtAgo(s.lastVisit!.visited_at)}）・{s.visitCount}回
               </div>
               <div className="dishes">{s.lastDishNames.join('、') || '—'}</div>
               <Stars value={s.lastVisit!.overall_rating} small label="総合" />

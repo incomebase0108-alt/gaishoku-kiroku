@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useRef, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
+import { CityField } from '../components/CityField'
 import { IconCamera, IconImage } from '../components/icons'
 import { Choice, Stars, TopBar, useToast } from '../components/ui'
 import { LastVisitCard } from '../components/VisitViews'
@@ -9,6 +10,7 @@ import type { Dish, DraftDish, DraftPhoto, VisitDraft } from '../domain/types'
 import { useBufferUrl } from '../hooks/usePhotoUrl'
 import { fmtYen, fromLocalInput, parseYen, toLocalInput } from '../lib/util'
 import { clearDraft, emptyDish, loadDraft, saveDraftState } from '../repositories/draftRepo'
+import { usedCities } from '../repositories/restaurantRepo'
 import { DraftError, getLastVisitDetail, isDishEmpty, pastDishNames, saveDraft } from '../repositories/visitRepo'
 import { processPhoto, requestPersist } from '../services/photoStorage'
 
@@ -182,6 +184,7 @@ export function RecordForm() {
   const editing = draft?.editingVisitId ?? null
   const last = useLiveQuery(() => (rid ? getLastVisitDetail(rid, editing) : null), [rid, editing])
   const names = useLiveQuery(() => (rid ? pastDishNames(rid) : []), [rid]) ?? []
+  const cities = useLiveQuery(usedCities, []) ?? []
 
   if (draft === undefined) return <div className="page" />
   if (draft === null) return <Navigate to="/record" replace />
@@ -309,6 +312,7 @@ export function RecordForm() {
               {draft.restaurant.genre ? <span className="tag">{draft.restaurant.genre}</span> : null} ジャンルを{draft.restaurant.genre ? '変える' : '選ぶ'}
             </button>
           )}
+          <CityField value={draft.restaurant.city} cities={cities} onChange={(city) => up({ restaurant: { ...draft.restaurant, city } })} />
         </div>
       </div>
 
