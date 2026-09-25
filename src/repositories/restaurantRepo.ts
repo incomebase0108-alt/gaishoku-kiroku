@@ -1,5 +1,6 @@
 import { db } from '../db/db'
-import type { Dish, Photo, Rating, Restaurant, Visit } from '../domain/types'
+import type { Rating } from '../domain/enums'
+import type { Dish, Photo, Restaurant, Visit } from '../domain/types'
 import { norm } from '../lib/util'
 import { byRecent } from './visitRepo'
 
@@ -25,11 +26,11 @@ export async function listRestaurantSummaries(): Promise<RestaurantSummary[]> {
     list.push(v)
     byRest.set(v.restaurant_id, list)
   }
-  const lastIds = [...byRest.values()].map((vs) => vs.sort(byRecent)[0].id)
-  const [dishes, photos] = await Promise.all([
-    db.dishes.where('visit_id').anyOf(lastIds).toArray(),
-    db.photos.where('visit_id').anyOf(lastIds).toArray(),
-  ])
+  for (const vs of byRest.values()) vs.sort(byRecent)
+  const lastIds = [...byRest.values()].map((vs) => vs[0].id)
+  const [dishes, photos] = await Promise.all([db.dishes.where('visit_id').anyOf(lastIds).toArray(), db.photos.toArray()])
+  const photosByVisit = new Map<string, Photo[]>()
+  for (const p of photos) photosByVisit.set(p.visit_id, [...(photosByVisit.get(p.visit_id) ?? []), p])
   const out = restaurants.map((r): RestaurantSummary => {
     const vs = byRest.get(r.id) ?? []
     const last = vs[0] ?? null
@@ -44,7 +45,8 @@ export async function listRestaurantSummaries(): Promise<RestaurantSummary[]> {
             .map((d) => d.name)
             .filter((n) => n)
         : [],
-      coverPhotoId: last ? pickCover(photos.filter((p) => p.visit_id === last.id)) : null,
+      // 前回に写真が無ければ、写真のあるいちばん新しい訪問から
+      coverPhotoId: pickCover(vs.map((v) => photosByVisit.get(v.id) ?? []).find((ps) => ps.length > 0) ?? []),
     }
   })
   return out.sort(

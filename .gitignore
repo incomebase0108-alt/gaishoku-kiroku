@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# 確認用の絵とバックアップ
+.shots
+dist

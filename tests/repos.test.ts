@@ -159,6 +159,15 @@ describe('店の一覧と料理のまとめ', () => {
     expect(list[0].coverPhotoId).not.toBeNull()
   })
 
+  it('前回に写真が無ければ、写真のあるいちばん新しい訪問の写真を表紙にする', async () => {
+    const old = photo('dish', 7)
+    const mid = photo('dish', 8)
+    await saveDraft(draft('A', T0 - DAY, [{ name: 'x', photos: [old] }]))
+    await saveDraft(draft('A', T0, [{ name: 'y', photos: [mid] }]))
+    await saveDraft(draft('A', T0 + DAY, [{ name: 'z' }]))
+    expect((await listRestaurantSummaries())[0].coverPhotoId).toBe(mid.id)
+  })
+
   it('同じ料理は品名でまとめ、最新の評価と回数を出す', async () => {
     const a = await saveDraft(draft('店', T0, [{ name: '味噌ラーメン', taste_rating: 3 }]))
     await saveDraft(draft('店', T0 + DAY, [{ name: '味噌 ラーメン', taste_rating: 5, want_again: 'must' }, { name: '餃子' }]))

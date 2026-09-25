@@ -1,6 +1,7 @@
 import { db } from '../db/db'
 import type { DraftDish, VisitDraft } from '../domain/types'
 import { newId } from '../lib/util'
+import { isDishEmpty } from './visitRepo'
 
 // 入力中の下書きは1件だけ。写真を撮るためにカメラを開いた間に
 // iPhone がページを閉じても、戻ったとき写真ごと残っているよう DB に置く。
@@ -33,6 +34,18 @@ export function newDraft(restaurant: VisitDraft['restaurant'], now = Date.now())
     visitPhotos: [],
     updated_at: now,
   }
+}
+
+// 何か入力したか（店を選んだだけなら捨ててよい）
+export function draftHasContent(d: VisitDraft): boolean {
+  return (
+    d.editingVisitId != null ||
+    d.overall_rating != null ||
+    d.total_price != null ||
+    d.memo.trim() !== '' ||
+    d.visitPhotos.length > 0 ||
+    d.dishes.some((x) => !isDishEmpty(x))
+  )
 }
 
 export async function loadDraft(): Promise<VisitDraft | null> {
