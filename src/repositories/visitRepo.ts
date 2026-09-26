@@ -112,6 +112,8 @@ export async function saveDraft(draft: VisitDraft): Promise<{ visitId: string; r
     // 市が違えば別の店（チェーン店の支店を分けるため）
     const genre = draft.restaurant.genre.trim()
     const city = (draft.restaurant.city ?? '').trim()
+    const lat = draft.restaurant.latitude ?? null
+    const lng = draft.restaurant.longitude ?? null
     let restaurant = draft.restaurant.id ? await db.restaurants.get(draft.restaurant.id) : undefined
     if (!restaurant) {
       const key = norm(name)
@@ -125,8 +127,8 @@ export async function saveDraft(draft: VisitDraft): Promise<{ visitId: string; r
         genre,
         city,
         address: '',
-        latitude: null,
-        longitude: null,
+        latitude: lat,
+        longitude: lng,
         memo: '',
         created_at: now,
         updated_at: now,
@@ -137,6 +139,10 @@ export async function saveDraft(draft: VisitDraft): Promise<{ visitId: string; r
       const patch: Partial<Restaurant> = {}
       if (genre && genre !== restaurant.genre) patch.genre = genre
       if (city && city !== restaurant.city) patch.city = city
+      if (lat != null && lng != null && (lat !== restaurant.latitude || lng !== restaurant.longitude)) {
+        patch.latitude = lat
+        patch.longitude = lng
+      }
       if (Object.keys(patch).length) await db.restaurants.update(restaurant.id, { ...patch, updated_at: now })
     }
 
@@ -228,7 +234,14 @@ export async function visitToDraft(id: string): Promise<VisitDraft | null> {
   const { visit, restaurant, dishes, photos } = detail
   return {
     editingVisitId: visit.id,
-    restaurant: { id: restaurant.id, name: restaurant.name, genre: restaurant.genre, city: restaurant.city ?? '' },
+    restaurant: {
+      id: restaurant.id,
+      name: restaurant.name,
+      genre: restaurant.genre,
+      city: restaurant.city ?? '',
+      latitude: restaurant.latitude,
+      longitude: restaurant.longitude,
+    },
     visited_at: visit.visited_at,
     people_count: visit.people_count,
     total_price: visit.total_price,

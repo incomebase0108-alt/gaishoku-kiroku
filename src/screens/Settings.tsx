@@ -3,9 +3,11 @@ import { useEffect, useRef, useState } from 'react'
 import { TopBar } from '../components/ui'
 import { db } from '../db/db'
 import { fmtAgo, fmtDateTime } from '../lib/util'
+import { ABOUT } from '../lib/about'
 import { isIOS, prefs } from '../lib/prefs'
 import { BackupError, backupFileName, buildBackupZip, importBackup, parseBackup, type ParsedBackup } from '../services/backup'
 import { requestPersist } from '../services/photoStorage'
+import { shareOrDownloadFile } from '../services/shareFile'
 
 function mb(n: number): string {
   return `${(n / 1024 / 1024).toFixed(1)}MB`
@@ -44,25 +46,9 @@ export function Settings() {
       const { bytes, counts: c } = await buildBackupZip()
       const name = backupFileName()
       const file = new File([bytes as BlobPart], name, { type: 'application/zip' })
-      let shared = false
-      if (navigator.canShare?.({ files: [file] })) {
-        try {
-          await navigator.share({ files: [file], title: name })
-          shared = true
-        } catch (e) {
-          if ((e as DOMException).name === 'AbortError') {
-            setMsg({ ok: false, text: 'バックアップの保存をやめました' })
-            return
-          }
-        }
-      }
-      if (!shared) {
-        const url = URL.createObjectURL(file)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = name
-        a.click()
-        setTimeout(() => URL.revokeObjectURL(url), 10000)
+      if ((await shareOrDownloadFile(file)) === 'cancelled') {
+        setMsg({ ok: false, text: 'バックアップの保存をやめました' })
+        return
       }
       const now = Date.now()
       prefs.setLastBackupAt(now)
@@ -196,6 +182,21 @@ export function Settings() {
         <p className="muted" style={{ marginBottom: 0 }}>
           ブラウザのデータを消すと、記録も消えます。
         </p>
+      </div>
+
+      <h2 className="sec">このアプリについて</h2>
+      <div className="card card-pad small">
+        <div style={{ fontWeight: 800, fontSize: 16 }}>{ABOUT.appName}</div>
+        <div>
+          制作：
+          {ABOUT.companyUrl ? (
+            <a href={ABOUT.companyUrl} target="_blank" rel="noreferrer">
+              {ABOUT.company}
+            </a>
+          ) : (
+            ABOUT.company
+          )}
+        </div>
       </div>
     </div>
   )

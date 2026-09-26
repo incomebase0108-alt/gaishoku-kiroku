@@ -276,6 +276,8 @@ textarea.input { min-height: 88px; resize: vertical; }
 .store-head .nm { font-size: 20px; font-weight: 800; flex: 1; min-width: 0; overflow-wrap: anywhere; line-height: 1.3; }
 
 .city-field { margin-top: 10px; }
+.loc-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-top: 4px; }
+.map-embed { width: 100%; height: 180px; border: 0; border-radius: var(--radius-m); display: block; background: var(--ai-soft); }
 .toggle-link { border: 0; background: none; color: var(--ai); padding: 8px 0; font-size: 14px; font-weight: 700; }
 
 /* ---- 店の詳細 ---- */

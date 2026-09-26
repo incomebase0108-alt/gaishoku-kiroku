@@ -9,6 +9,7 @@ import { RestaurantDetail } from './screens/RestaurantDetail'
 import { RestaurantEdit } from './screens/RestaurantEdit'
 import { Search } from './screens/Search'
 import { Settings } from './screens/Settings'
+import { SharedStore } from './screens/SharedStore'
 import { VisitDetail } from './screens/VisitDetail'
 
 function ScrollTop() {
@@ -36,6 +37,7 @@ function Shell() {
         <Route path="/history" element={<History />} />
         <Route path="/search" element={<Search />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/shared" element={<SharedStore />} />
         <Route path="*" element={<Home />} />
       </Routes>
       {!inForm && <TabBar />}

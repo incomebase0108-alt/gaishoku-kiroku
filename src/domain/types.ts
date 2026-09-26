@@ -92,7 +92,14 @@ export interface DraftDish {
 
 export interface VisitDraft {
   editingVisitId: string | null
-  restaurant: { id: string | null; name: string; genre: string; city: string }
+  restaurant: {
+    id: string | null
+    name: string
+    genre: string
+    city: string
+    latitude: number | null // 記録の画面で「今いる場所」を取ったとき
+    longitude: number | null
+  }
   visited_at: number
   people_count: number
   total_price: number | null

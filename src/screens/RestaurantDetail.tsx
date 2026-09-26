@@ -6,6 +6,10 @@ import { PhotoViewer } from '../components/PhotoViewer'
 import { Stars, Thumb, TopBar, WantStamp, useToast } from '../components/ui'
 import { DishMeta, LastVisitCard, VisitRow } from '../components/VisitViews'
 import { fmtAgo, fmtDate } from '../lib/util'
+import { hasLocation, mapEmbed, mapLink } from '../services/location'
+import { makeStoreReport } from '../services/report'
+import { buildSharedStore, shareText, shareUrl } from '../services/share'
+import { shareOrCopyText, shareOrDownloadFile } from '../services/shareFile'
 import { getRestaurant, listDishSummaries } from '../repositories/restaurantRepo'
 import { storeOf } from '../repositories/draftRepo'
 import { listVisitsOfRestaurant } from '../repositories/visitRepo'
@@ -18,6 +22,7 @@ export function RestaurantDetail() {
   const [toast, showToast] = useToast()
   const [viewer, setViewer] = useState<number | null>(null)
   const [openDish, setOpenDish] = useState<string | null>(null)
+  const [sharing, setSharing] = useState<'store' | 'pdf' | null>(null)
   const restaurant = useLiveQuery(async () => (await getRestaurant(id)) ?? null, [id])
   const visits = useLiveQuery(() => listVisitsOfRestaurant(id), [id])
   const dishes = useLiveQuery(() => listDishSummaries(id), [id])
@@ -42,6 +47,34 @@ export function RestaurantDetail() {
   const last = visits[0] ?? null
   const photoIds = visits.flatMap((v) => v.photos.map((p) => p.image_path))
 
+  const sendStore = async () => {
+    setSharing('store')
+    try {
+      const s = await buildSharedStore(id)
+      if (!s) return
+      const res = await shareOrCopyText(`${s.name}（食歴）`, shareText(s), shareUrl(s, location.href))
+      if (res === 'copied') showToast('送る文面とリンクをコピーしました')
+      if (res === 'failed') showToast('送れませんでした')
+    } finally {
+      setSharing(null)
+    }
+  }
+
+  const sendPdf = async () => {
+    setSharing('pdf')
+    try {
+      const rep = await makeStoreReport(id)
+      if (!rep) return
+      ;(window as unknown as { __lastReport?: HTMLCanvasElement[] }).__lastReport = rep.pages // 確認用
+      const res = await shareOrDownloadFile(rep.file, `${restaurant.name}の評価`)
+      if (res === 'downloaded') showToast('PDFを保存しました')
+    } catch {
+      showToast('PDFを作れませんでした')
+    } finally {
+      setSharing(null)
+    }
+  }
+
   const record = async () => {
     if (await startDraft(storeOf(restaurant))) nav('/record/form')
   }
@@ -62,6 +95,14 @@ export function RestaurantDetail() {
         {restaurant.address && <span>{restaurant.address}</span>}
       </div>
       {restaurant.memo && <p className="small pre">{restaurant.memo}</p>}
+      {hasLocation(restaurant) && (
+        <div style={{ marginTop: 10 }}>
+          <iframe className="map-embed" title={`${restaurant.name}の地図`} src={mapEmbed(restaurant)} loading="lazy" />
+          <a className="btn block" style={{ marginTop: 8 }} href={mapLink(restaurant, restaurant.name)} target="_blank" rel="noreferrer">
+            地図アプリで開く
+          </a>
+        </div>
+      )}
 
       <div className="stats">
         <div className="stat">
@@ -73,6 +114,15 @@ export function RestaurantDetail() {
           <b className="num">{last ? fmtDate(last.visit.visited_at) : '—'}</b>
           {last && <small>{fmtAgo(last.visit.visited_at)}</small>}
         </div>
+      </div>
+
+      <div className="row" style={{ marginBottom: 12 }}>
+        <button type="button" className="btn" onClick={sendStore} disabled={sharing != null}>
+          {sharing === 'store' ? '準備中…' : '店を送る'}
+        </button>
+        <button type="button" className="btn" onClick={sendPdf} disabled={sharing != null}>
+          {sharing === 'pdf' ? 'PDFを作成中…' : '評価をPDFで送る'}
+        </button>
       </div>
 
       {last ? <LastVisitCard detail={last} /> : <div className="card empty">まだこの店の記録はありません</div>}

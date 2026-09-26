@@ -17,6 +17,8 @@ import {
 import { buildBackupZip, parseBackup, importBackup, BackupError } from '../src/services/backup'
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
 import { usedCities } from '../src/repositories/restaurantRepo'
+import { addSharedStore, buildSharedStore, decodeShared, encodeShared, shareText, shareUrl } from '../src/services/share'
+import { buildPdf } from '../src/services/pdf'
 
 const DAY = 86400000
 const T0 = new Date(2026, 8, 1, 12, 0).getTime()
@@ -39,7 +41,7 @@ function draft(
   dishes: Partial<VisitDraft['dishes'][number]>[],
   extra: Partial<VisitDraft> = {},
 ): VisitDraft {
-  const d = newDraft({ id: null, name, genre: 'ラーメン', city: '' }, at)
+  const d = newDraft({ id: null, name, genre: 'ラーメン', city: '', latitude: null, longitude: null }, at)
   d.dishes = dishes.map((x) => ({ ...emptyDish(), ...x }))
   return { ...d, ...extra }
 }
@@ -276,11 +278,11 @@ describe('市', () => {
   it('市が空の店に、次の記録で入れた市が入る（空で上書きはしない）', async () => {
     const a = await saveDraft(draft('店', T0, [{ name: 'x' }]))
     const d2 = draft('店', T0 + DAY, [{ name: 'y' }])
-    d2.restaurant = { id: a.restaurantId, name: '店', genre: '', city: '岡崎市' }
+    d2.restaurant = { id: a.restaurantId, name: '店', genre: '', city: '岡崎市', latitude: null, longitude: null }
     await saveDraft(d2)
     expect((await db.restaurants.get(a.restaurantId))!.city).toBe('岡崎市')
     const d3 = draft('店', T0 + 2 * DAY, [{ name: 'z' }])
-    d3.restaurant = { id: a.restaurantId, name: '店', genre: '', city: '' }
+    d3.restaurant = { id: a.restaurantId, name: '店', genre: '', city: '', latitude: null, longitude: null }
     await saveDraft(d3)
     expect((await db.restaurants.get(a.restaurantId))!.city).toBe('岡崎市')
   })
@@ -340,5 +342,109 @@ describe('今までの記録を引き継ぐ', () => {
     const r = (await db.restaurants.toArray())[0]
     expect(r.city).toBe('')
     expect(r.name).toBe('店')
+  })
+})
+
+describe('店の位置', () => {
+  it('記録で取った位置が新しい店に入り、既存の店は取り直した位置に更新される', async () => {
+    const d = draft('店', T0, [{ name: 'x' }])
+    d.restaurant.latitude = 35.170915
+    d.restaurant.longitude = 136.881537
+    const a = await saveDraft(d)
+    expect(await db.restaurants.get(a.restaurantId)).toMatchObject({ latitude: 35.170915, longitude: 136.881537 })
+    const d2 = draft('店', T0 + DAY, [{ name: 'y' }])
+    d2.restaurant = { id: a.restaurantId, name: '店', genre: '', city: '', latitude: 35.2, longitude: 136.9 }
+    await saveDraft(d2)
+    expect(await db.restaurants.get(a.restaurantId)).toMatchObject({ latitude: 35.2, longitude: 136.9 })
+    // 位置を取らずに記録しても、位置は消えない
+    const d3 = draft('店', T0 + 2 * DAY, [{ name: 'z' }])
+    d3.restaurant = { id: a.restaurantId, name: '店', genre: '', city: '', latitude: null, longitude: null }
+    await saveDraft(d3)
+    expect(await db.restaurants.get(a.restaurantId)).toMatchObject({ latitude: 35.2, longitude: 136.9 })
+  })
+})
+
+describe('店の共有', () => {
+  async function sharedFromSaved() {
+    const d = inCity('麺屋 一', '名古屋市', T0, [
+      { name: '醤油ラーメン', taste_rating: 5, want_again: 'must', amount_rating: 'just', memo: '店員さんが感じ悪い' },
+      { name: '餃子', taste_rating: 2, want_again: 'no' },
+    ])
+    d.memo = '元カレと来た'
+    d.overall_rating = 4
+    d.restaurant.latitude = 35.17
+    d.restaurant.longitude = 136.88
+    const { restaurantId } = await saveDraft(d)
+    return (await buildSharedStore(restaurantId))!
+  }
+
+  it('送って開くと元どおり（評価・位置・市）', async () => {
+    const s = await sharedFromSaved()
+    const back = decodeShared(encodeShared(s))
+    expect(back).toEqual(s)
+    expect(back).toMatchObject({ name: '麺屋 一', city: '名古屋市', latitude: 35.17, overall: 4, visits: 1 })
+    expect(back!.dishes[0]).toMatchObject({ name: '醤油ラーメン', taste: 5, want: 'must', amount: 'just' })
+  })
+
+  it('自分のメモは送る中身に入らない', async () => {
+    const s = await sharedFromSaved()
+    const all = JSON.stringify(s) + shareText(s) + decodeURIComponent(shareUrl(s, 'https://x/app/'))
+    expect(all).not.toContain('感じ悪い')
+    expect(all).not.toContain('元カレ')
+  })
+
+  it('文面に店名・市・料理・地図が入る', async () => {
+    const t = shareText(await sharedFromSaved())
+    expect(t).toContain('麺屋 一（名古屋市・ラーメン）')
+    expect(t).toContain('醤油ラーメン ★★★★★ 絶対食べる')
+    expect(t).toContain('google.com/maps')
+  })
+
+  it('壊れたリンク・形の違う中身は開かない', () => {
+    expect(decodeShared('')).toBeNull()
+    expect(decodeShared('abc!!')).toBeNull()
+    expect(decodeShared(encodeShared({ v: 2 } as never))).toBeNull()
+    const bad = decodeShared(
+      encodeShared({ v: 1, name: '店', dishes: [{ name: 'x', want: 'hack', amount: 'large' }] } as never),
+    )
+    expect(bad!.dishes[0]).toMatchObject({ want: null, amount: 'large' })
+  })
+
+  it('受け取った店を追加でき、2回追加しても増えない', async () => {
+    const s = await sharedFromSaved()
+    await Promise.all(db.tables.map((t) => t.clear()))
+    const id1 = await addSharedStore(s)
+    const id2 = await addSharedStore(s)
+    expect(id2).toBe(id1)
+    expect(await db.restaurants.count()).toBe(1)
+    const r = (await db.restaurants.get(id1))!
+    expect(r).toMatchObject({ name: '麺屋 一', city: '名古屋市', genre: 'ラーメン', latitude: 35.17 })
+    expect(r.memo).toBe('教えてもらったおすすめ：醤油ラーメン★5（絶対食べる）')
+    expect(await db.visits.count()).toBe(0) // 行ったことにはしない
+  })
+})
+
+describe('PDF', () => {
+  it('ページ数どおりに綴じられ、目次の位置が各オブジェクトを指す', () => {
+    const jpeg = (n: number) => new Uint8Array([0xff, 0xd8, n, n, 0xff, 0xd9])
+    const bytes = buildPdf(
+      [
+        { jpeg: jpeg(1), width: 10, height: 14 },
+        { jpeg: jpeg(2), width: 10, height: 14 },
+      ],
+      '麺屋 一（食歴）',
+    )
+    const text = new TextDecoder('latin1').decode(bytes)
+    expect(text.startsWith('%PDF-1.4')).toBe(true)
+    expect(text.trimEnd().endsWith('%%EOF')).toBe(true)
+    expect(text).toContain('/Count 2')
+    const startxref = Number(/startxref\n(\d+)/.exec(text)![1])
+    expect(text.slice(startxref, startxref + 4)).toBe('xref')
+    const rows = text.slice(startxref).split('\n').filter((l) => / n $/.test(l))
+    expect(rows).toHaveLength(9) // カタログ・ページ一覧・情報 ＋ 2ページ×3
+    rows.forEach((row, i) => {
+      const off = Number(row.slice(0, 10))
+      expect(text.slice(off, off + 12)).toContain(`${i + 1} 0 obj`)
+    })
   })
 })

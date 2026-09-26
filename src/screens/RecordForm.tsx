@@ -2,6 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useRef, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { CityField } from '../components/CityField'
+import { LocationRow } from '../components/LocationRow'
 import { IconCamera, IconImage } from '../components/icons'
 import { Choice, Stars, TopBar, useToast } from '../components/ui'
 import { LastVisitCard } from '../components/VisitViews'
@@ -190,6 +191,9 @@ export function RecordForm() {
   if (draft === null) return <Navigate to="/record" replace />
 
   const up = (patch: Partial<VisitDraft>) => setDraft((d) => (d ? { ...d, ...patch } : d))
+  // 店の欄は、位置と市が別々に（非同期で）届くので、必ず最新の下書きに重ねる
+  const upStore = (patch: Partial<VisitDraft['restaurant']>) =>
+    setDraft((d) => (d ? { ...d, restaurant: { ...d.restaurant, ...patch } } : d))
   const upDish = (id: string, patch: Partial<DraftDish>) =>
     setDraft((d) => (d ? { ...d, dishes: d.dishes.map((x) => (x.id === id ? { ...x, ...patch } : x)) } : d))
 
@@ -298,7 +302,7 @@ export function RecordForm() {
                     className="chip"
                     aria-pressed={draft.restaurant.genre === g}
                     onClick={() => {
-                      up({ restaurant: { ...draft.restaurant, genre: draft.restaurant.genre === g ? '' : g } })
+                      upStore({ genre: draft.restaurant.genre === g ? '' : g })
                       if (draft.restaurant.genre !== g) setGenreOpen(false)
                     }}
                   >
@@ -312,7 +316,22 @@ export function RecordForm() {
               {draft.restaurant.genre ? <span className="tag">{draft.restaurant.genre}</span> : null} ジャンルを{draft.restaurant.genre ? '変える' : '選ぶ'}
             </button>
           )}
-          <CityField value={draft.restaurant.city} cities={cities} onChange={(city) => up({ restaurant: { ...draft.restaurant, city } })} />
+          <CityField
+            key={draft.restaurant.city ? 'set' : 'empty'}
+            value={draft.restaurant.city}
+            cities={cities}
+            onChange={(city) => upStore({ city })}
+          />
+          <LocationRow
+            value={draft.restaurant}
+            city={draft.restaurant.city}
+            auto={!editing}
+            onChange={(p) => upStore(p)}
+            onCity={(city) => {
+              upStore({ city })
+              showToast(`市に「${city}」を入れました`)
+            }}
+          />
         </div>
       </div>
 

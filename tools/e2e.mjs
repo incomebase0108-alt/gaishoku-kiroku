@@ -43,8 +43,24 @@ async function addPhoto(page, button) {
 }
 const card = (page, n) => page.locator('.dish-card').nth(n)
 
+// 外に出ない準備：住所検索は決まった答え、地図は空、共有メニューは送った中身を記録するだけ
+const NAGOYA = { latitude: 35.170915, longitude: 136.881537 }
+async function prepare(ctx) {
+  await ctx.route(/nominatim\.openstreetmap\.org/, (r) =>
+    r.fulfill({ contentType: 'application/json', body: JSON.stringify({ address: { city: '名古屋市', province: '愛知県' } }) }),
+  )
+  await ctx.route(/openstreetmap\.org\/export/, (r) => r.fulfill({ contentType: 'text/html', body: '<html><body>map</body></html>' }))
+  await ctx.addInitScript(() => {
+    navigator.share = async (d) => {
+      window.__shared = { title: d.title, text: d.text, url: d.url }
+    }
+    navigator.canShare = () => false // ファイルはダウンロードで受け取る
+  })
+}
+
 // ---- 1台目 ----
-const ctx = await browser.newContext(phone)
+const ctx = await browser.newContext({ ...phone, permissions: ['geolocation'], geolocation: NAGOYA })
+await prepare(ctx)
 const page = await newPage(ctx)
 await page.goto(BASE)
 await page.getByText('まだ記録がありません').waitFor()
@@ -56,9 +72,9 @@ await page.locator('#store-q').fill('麺屋 一')
 await page.getByRole('button', { name: '「麺屋 一」を新しい店として記録' }).click()
 await page.waitForURL(/record\/form/)
 await page.getByRole('button', { name: 'ラーメン', exact: true }).click()
-await page.getByLabel('市を入れる').fill('名古屋市')
-await page.getByRole('button', { name: '決定' }).click()
-check('記録画面で市を入れられる', (await page.locator('.store-head + div').innerText()).includes('名古屋市'))
+await page.getByText('📍 位置あり').waitFor()
+await page.locator('.store-head + div .tag', { hasText: '名古屋市' }).waitFor()
+check('位置を許可済みなら、押さなくても位置と市が入る', true)
 
 const cam = await addPhoto(page, card(page, 0).getByRole('button', { name: 'カメラで撮る' }))
 check('「カメラで撮る」はすぐカメラが起動する指定（capture=environment）', cam.capture === 'environment' && !cam.multiple, JSON.stringify(cam))
@@ -133,7 +149,45 @@ check('行った回数 2回', (await page.locator('.stat').first().innerText()).
 const sumText = await page.locator('.dish-sum', { hasText: '醤油ラーメン' }).innerText()
 check('食べた料理に「醤油ラーメン 2回」', sumText.includes('2回'))
 
+// ---- 店の位置・PDF・共有 ----
+check('店の画面に地図が出る', await page.locator('iframe.map-embed').isVisible())
+const maplink = await page.getByRole('link', { name: '地図アプリで開く' }).getAttribute('href')
+check('地図アプリのリンクに店の位置が入る', maplink.includes('35.170915') && maplink.includes('136.881537'), maplink)
+
+const [pdfDl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '評価をPDFで送る' }).click()])
+const pdfPath = `${OUT}/report.pdf`
+await pdfDl.saveAs(pdfPath)
+const { readFileSync, writeFileSync } = await import('node:fs')
+const pdf = readFileSync(pdfPath)
+check('評価のPDFができる', pdf.subarray(0, 8).toString('latin1') === '%PDF-1.4' && pdfDl.suggestedFilename().endsWith('.pdf'), `${pdfDl.suggestedFilename()} ${(pdf.length / 1024).toFixed(0)}KB`)
+const pagesPng = await page.evaluate(() => window.__lastReport.map((c) => c.toDataURL('image/png')))
+pagesPng.forEach((u, i) => writeFileSync(`${OUT}/report-p${i + 1}.png`, Buffer.from(u.split(',')[1], 'base64')))
+check('PDFのページを描けた', pagesPng.length >= 1, `${pagesPng.length}ページ`)
+
+await page.getByRole('button', { name: '店を送る' }).click()
+await page.waitForFunction(() => window.__shared)
+const shared = await page.evaluate(() => window.__shared)
+check('店を送る：文面に店名・市・評価', shared.text.includes('麺屋 一（名古屋市・ラーメン）') && shared.text.includes('醤油ラーメン'), shared.text.split('\n')[0])
+check('店を送る：食歴で開けるリンクが付く', shared.url.includes('#/shared?d='), `${shared.url.length}文字`)
+
+// 受け取った人のスマホ
+const ctx3 = await browser.newContext(phone)
+await prepare(ctx3)
+const p3 = await newPage(ctx3)
+await p3.goto(shared.url)
+await p3.getByRole('heading', { name: '麺屋 一' }).waitFor()
+await p3.waitForTimeout(300)
+await shot(p3, '12-shared-received')
+check('受け取った人に店と評価が見える', (await p3.locator('.dish-sum').allInnerTexts()).join().includes('醤油ラーメン'))
+await p3.getByRole('button', { name: '自分の食歴に追加' }).click()
+await p3.waitForURL(/#\/restaurant\//)
+await p3.getByText(/教えてもらったおすすめ/).waitFor()
+check('受け取った店を自分の食歴に追加できる', (await p3.locator('.store-title').innerText()) === '麺屋 一')
+const errs3 = p3.errors
+await ctx3.close()
+
 // 別の店も1つ
+await ctx.clearPermissions() // 2軒目は位置なし・市は手で入れる
 await page.goto(BASE + '#/record')
 await page.locator('#store-q').fill('喫茶ツバメ')
 await page.getByRole('button', { name: /新しい店として記録/ }).click()
@@ -141,6 +195,7 @@ await page.getByRole('button', { name: 'カフェ', exact: true }).click()
 check('入れたことのある市がボタンで出る', await page.getByRole('button', { name: '名古屋市', exact: true }).isVisible())
 await page.getByLabel('市を入れる').fill('豊橋市')
 await page.getByRole('button', { name: '決定' }).click()
+check('記録画面で市を手で入れられる', (await page.locator('.store-head + div').innerText()).includes('豊橋市'))
 await card(page, 0).getByLabel('品名').fill('ナポリタン')
 await card(page, 0).getByRole('button', { name: '多い' }).click()
 await card(page, 0).getByRole('button', { name: 'あり' }).click()
@@ -216,11 +271,13 @@ await download.saveAs(zipPath)
 await page.getByText(/バックアップを作りました/).waitFor()
 check('バックアップを書き出せる', true, await page.getByText(/バックアップを作りました/).innerText())
 await shot(page, '08-settings')
+check('設定に制作会社が出る', await page.getByText('制作：合同会社インカムベース').isVisible())
 const errs1 = page.errors
 await ctx.close()
 
 // ---- 新しいスマホで戻す ----
 const ctx2 = await browser.newContext(phone)
+await prepare(ctx2)
 const p2 = await newPage(ctx2)
 await p2.goto(BASE + '#/settings')
 const [chooser] = await Promise.all([
@@ -241,7 +298,7 @@ check('戻した後も直した内容が残る', (await p2.locator('.dish-sum').
 await p2.waitForTimeout(300)
 await shot(p2, '09-restored-store')
 
-check('ブラウザのエラーなし', errs1.length + p2.errors.length === 0, [...errs1, ...p2.errors].join(' | '))
+check('ブラウザのエラーなし', errs1.length + p2.errors.length + errs3.length === 0, [...errs1, ...p2.errors, ...errs3].join(' | '))
 await browser.close()
 const ng = results.filter((r) => !r.ok).length
 console.log(`\n${results.length - ng}/${results.length} OK`)

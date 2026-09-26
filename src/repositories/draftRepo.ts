@@ -23,11 +23,11 @@ export function emptyDish(): DraftDish {
 
 // 登録済みの店を下書きの「店」に
 export function storeOf(r: Restaurant): VisitDraft['restaurant'] {
-  return { id: r.id, name: r.name, genre: r.genre, city: r.city ?? '' }
+  return { id: r.id, name: r.name, genre: r.genre, city: r.city ?? '', latitude: r.latitude, longitude: r.longitude }
 }
 
 export function newStore(name: string): VisitDraft['restaurant'] {
-  return { id: null, name: name.trim(), genre: '', city: '' }
+  return { id: null, name: name.trim(), genre: '', city: '', latitude: null, longitude: null }
 }
 
 export function newDraft(restaurant: VisitDraft['restaurant'], now = Date.now()): VisitDraft {
@@ -62,7 +62,8 @@ export async function loadDraft(): Promise<VisitDraft | null> {
   if (!row) return null
   const { key: _key, ...draft } = row
   // 市を足す前に保存された下書きにも city を入れておく
-  return { ...draft, restaurant: { ...draft.restaurant, city: draft.restaurant.city ?? '' } }
+  const r = draft.restaurant
+  return { ...draft, restaurant: { ...r, city: r.city ?? '', latitude: r.latitude ?? null, longitude: r.longitude ?? null } }
 }
 
 export async function saveDraftState(draft: VisitDraft): Promise<void> {

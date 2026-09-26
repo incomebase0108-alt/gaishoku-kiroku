@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { TopBar } from '../components/ui'
 import { GENRES } from '../domain/enums'
+import { getCurrentPosition, hasLocation, LocationError, mapLink } from '../services/location'
 import { deleteRestaurant, getRestaurant, updateRestaurant, usedCities } from '../repositories/restaurantRepo'
 
 export function RestaurantEdit() {
@@ -12,6 +13,8 @@ export function RestaurantEdit() {
   const cities = useLiveQuery(usedCities, [])
   const [form, setForm] = useState({ name: '', genre: '', city: '', address: '', memo: '' })
   const [loaded, setLoaded] = useState(false)
+  const [locBusy, setLocBusy] = useState(false)
+  const [locMsg, setLocMsg] = useState<string | null>(null)
 
   useEffect(() => {
     if (r && !loaded) {
@@ -26,6 +29,27 @@ export function RestaurantEdit() {
     if (!form.name.trim()) return
     await updateRestaurant(id, { name: form.name.trim(), genre: form.genre, city: form.city.trim(), address: form.address.trim(), memo: form.memo.trim() })
     nav(-1)
+  }
+
+  // 位置はその場で保存する（店にいるときに押す想定）
+  const setHere = async () => {
+    setLocBusy(true)
+    setLocMsg(null)
+    try {
+      const p = await getCurrentPosition()
+      await updateRestaurant(id, p)
+      setLocMsg('今いる場所を店の位置にしました')
+    } catch (e) {
+      setLocMsg(e instanceof LocationError ? e.message : '今いる場所が分かりませんでした')
+    } finally {
+      setLocBusy(false)
+    }
+  }
+
+  const clearLoc = async () => {
+    if (!window.confirm('店の位置を消しますか？')) return
+    await updateRestaurant(id, { latitude: null, longitude: null })
+    setLocMsg('店の位置を消しました')
   }
 
   const remove = async () => {
@@ -59,6 +83,27 @@ export function RestaurantEdit() {
             <option key={c} value={c} />
           ))}
         </datalist>
+      </div>
+      <div className="field">
+        <span className="label">店の位置（地図）</span>
+        {hasLocation(r) ? (
+          <div className="loc-row">
+            <a className="toggle-link" href={mapLink(r, r.name)} target="_blank" rel="noreferrer">
+              📍 地図で見る
+            </a>
+            <button type="button" className="toggle-link" onClick={setHere} disabled={locBusy}>
+              今いる場所で取り直す
+            </button>
+            <button type="button" className="toggle-link" style={{ color: 'var(--danger)' }} onClick={clearLoc}>
+              位置を消す
+            </button>
+          </div>
+        ) : (
+          <button type="button" className="btn block" onClick={setHere} disabled={locBusy}>
+            {locBusy ? '今いる場所を調べています…' : '📍 今いる場所を店の位置にする'}
+          </button>
+        )}
+        {locMsg && <div className="small" style={{ marginTop: 4 }}>{locMsg}</div>}
       </div>
       <div className="field">
         <label htmlFor="r-addr">場所（任意）</label>

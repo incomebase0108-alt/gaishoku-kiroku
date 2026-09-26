@@ -62,7 +62,7 @@ export async function getRestaurant(id: string): Promise<Restaurant | undefined>
 
 export async function updateRestaurant(
   id: string,
-  patch: Partial<Pick<Restaurant, 'name' | 'genre' | 'city' | 'address' | 'memo'>>,
+  patch: Partial<Pick<Restaurant, 'name' | 'genre' | 'city' | 'address' | 'memo' | 'latitude' | 'longitude'>>,
 ): Promise<void> {
   await db.restaurants.update(id, { ...patch, updated_at: Date.now() })
 }
