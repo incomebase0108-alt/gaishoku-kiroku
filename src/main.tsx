@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { registerSW } from 'virtual:pwa-register'
 import App from './App.tsx'
+import { listenInstallPrompt } from './lib/install'
 import './styles.css'
 
 // 新しい版を配ったら、次にアプリを開いたとき（裏から戻ったときも）に確かめ、
@@ -19,6 +20,8 @@ registerSW({
     setInterval(check, 60 * 60 * 1000)
   },
 })
+
+listenInstallPrompt()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

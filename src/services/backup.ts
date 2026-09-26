@@ -87,13 +87,32 @@ export function backupFileName(now = Date.now()): string {
   return `shokureki-backup-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.zip`
 }
 
-export function parseBackup(bytes: Uint8Array): ParsedBackup {
+// 読み込むのは決まった名前の中身だけ。展開後の大きさにも上限を置く
+// （展開すると何百倍にも膨らむ zip を渡されても、スマホが固まらないように）
+export const MAX_UNZIPPED = 1.5 * 1024 ** 3
+const ENTRY_NAME = /^(data\.json|(photos|thumbs)\/[\w-]+\.(jpg|png|webp))$/
+const PHOTO_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+
+export function parseBackup(bytes: Uint8Array, limit = MAX_UNZIPPED): ParsedBackup {
   let entries: Record<string, Uint8Array>
+  let total = 0
+  let tooBig = false
   try {
-    entries = unzipSync(bytes)
+    entries = unzipSync(bytes, {
+      filter: (f) => {
+        if (!ENTRY_NAME.test(f.name)) return false
+        total += f.originalSize
+        if (total > limit) tooBig = true
+        return !tooBig
+      },
+    })
   } catch {
     throw new BackupError('zip ファイルとして読めませんでした')
   }
+  if (tooBig) throw new BackupError('バックアップが大きすぎて読み込めません')
+  let unzipped = 0
+  for (const u of Object.values(entries)) unzipped += u.byteLength
+  if (unzipped > limit) throw new BackupError('バックアップが大きすぎて読み込めません')
   const json = entries['data.json']
   if (!json) throw new BackupError('このアプリのバックアップではありません（data.json がありません）')
   let data: BackupData
@@ -111,6 +130,8 @@ export function parseBackup(bytes: Uint8Array): ParsedBackup {
   }
   const files: PhotoFile[] = []
   for (const [id, mime] of Object.entries(data.photoMimes ?? {})) {
+    // 写真は画像の種類だけ受け付ける（ほかの種類を画像として持たない）
+    if (typeof mime !== 'string' || !PHOTO_MIMES.has(mime)) continue
     const full = entries[`photos/${id}.${ext(mime)}`]
     const thumb = entries[`thumbs/${id}.${ext(mime)}`]
     if (full && thumb) files.push({ id, mime, full: toBuf(full), thumb: toBuf(thumb) })

@@ -1,12 +1,13 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { IconBowl, IconClock, IconPlus, IconStore } from '../components/icons'
 import { Stars, Thumb } from '../components/ui'
 import { loadDraft } from '../repositories/draftRepo'
 import { listRestaurantSummaries } from '../repositories/restaurantRepo'
 import { fmtAgo, fmtDate } from '../lib/util'
-import { isIOS, isStandalone, prefs } from '../lib/prefs'
+import { canInstall, install, onInstallChange } from '../lib/install'
+import { inAppBrowser, isIOS, isStandalone, prefs } from '../lib/prefs'
 
 const BACKUP_EVERY = 14 * 86400000
 
@@ -15,6 +16,9 @@ export function Home() {
   const draft = useLiveQuery(loadDraft, [])
   const [installHint, setInstallHint] = useState(() => !isStandalone() && !prefs.installHintHidden())
   const [backupHint, setBackupHint] = useState(true)
+  const [installable, setInstallable] = useState(canInstall)
+  useEffect(() => onInstallChange(() => setInstallable(canInstall())), [])
+  const inApp = inAppBrowser()
 
   const visited = (summaries ?? []).filter((s) => s.lastVisit)
   const now = Date.now()
@@ -41,7 +45,27 @@ export function Home() {
         </div>
       )}
 
-      {installHint && (
+      {inApp && (
+        <div className="notice warn" data-testid="inapp-notice">
+          <span className="grow small">
+            {inApp === 'line' ? 'LINE' : inApp === 'instagram' ? 'Instagram' : 'Facebook'}
+            の中で開いています。ここではホーム画面に追加できず、記録もこのアプリの中に残ってしまいます。
+            {isIOS() ? '右上（または右下）の「…」→「Safari で開く」' : '右上の「︙」→「ブラウザで開く」'}
+            を選んでから使ってください
+          </span>
+        </div>
+      )}
+
+      {!inApp && installable && (
+        <div className="notice">
+          <span className="grow small">アプリとしてホーム画面に追加できます。記録が消えにくくなります</span>
+          <button type="button" className="btn primary" onClick={() => void install()} data-testid="install-btn">
+            追加する
+          </button>
+        </div>
+      )}
+
+      {!inApp && !installable && installHint && (
         <div className="notice">
           <span className="grow small">
             {isIOS()

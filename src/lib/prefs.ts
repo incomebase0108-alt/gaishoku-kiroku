@@ -33,3 +33,12 @@ export function isStandalone(): boolean {
 export function isIOS(): boolean {
   return /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
 }
+
+// LINE・Instagram・Facebook などのアプリの中のブラウザ（ここではホーム画面に追加できず、記録もそのアプリの中に残る）
+export function inAppBrowser(): 'line' | 'instagram' | 'facebook' | null {
+  const ua = navigator.userAgent
+  if (/ Line\//i.test(ua)) return 'line'
+  if (/Instagram/i.test(ua)) return 'instagram'
+  if (/FBAN|FBAV/i.test(ua)) return 'facebook'
+  return null
+}

@@ -263,6 +263,29 @@ describe('バックアップ', () => {
   it('関係ないファイルは読み込まない', () => {
     expect(() => parseBackup(new Uint8Array([1, 2, 3]))).toThrow(BackupError)
   })
+
+  it('展開すると大きすぎる zip は読まずに断る', async () => {
+    await saveDraft(draft('店', T0, [{ name: 'x' }]))
+    const entries = unzipSync((await buildBackupZip()).bytes)
+    entries['photos/big.jpg'] = new Uint8Array(2_000_000) // ゼロばかりなので zip では数KBに縮む
+    const zip = zipSync(entries, { level: 9 })
+    expect(zip.byteLength).toBeLessThan(50_000)
+    expect(() => parseBackup(zip, 1_000_000)).toThrow('大きすぎて')
+    expect(parseBackup(zip, 3_000_000).counts.visits).toBe(1)
+  })
+
+  it('写真は画像の種類だけ受け付け、決まった名前以外の中身は無視する', async () => {
+    const p = photo('dish', 7)
+    await saveDraft(draft('店', T0, [{ name: 'x', photos: [p] }]))
+    const entries = unzipSync((await buildBackupZip()).bytes)
+    const data = JSON.parse(strFromU8(entries['data.json']))
+    data.photoMimes[p.id] = 'text/html'
+    entries['data.json'] = strToU8(JSON.stringify(data))
+    entries['../evil.html'] = strToU8('<script>alert(1)</script>')
+    const parsed = parseBackup(zipSync(entries))
+    expect(parsed.files.map((f) => f.id)).toEqual([])
+    expect(parsed.counts.visits).toBe(1)
+  })
 })
 
 function inCity(name: string, city: string, at: number, dishes: Partial<VisitDraft['dishes'][number]>[]): VisitDraft {

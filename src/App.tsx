@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { HashRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { TabBar } from './components/TabBar'
 import { History } from './screens/History'
+import { Invite } from './screens/Invite'
 import { Home } from './screens/Home'
 import { RecordForm } from './screens/RecordForm'
 import { RecordPick } from './screens/RecordPick'
@@ -38,6 +39,7 @@ function Shell() {
         <Route path="/search" element={<Search />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/shared" element={<SharedStore />} />
+        <Route path="/invite" element={<Invite />} />
         <Route path="*" element={<Home />} />
       </Routes>
       {!inForm && <TabBar />}

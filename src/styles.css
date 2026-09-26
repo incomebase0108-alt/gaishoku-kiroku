@@ -332,7 +332,9 @@ textarea.input { min-height: 88px; resize: vertical; }
 .small { font-size: 13px; }
 .pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .spacer { height: 12px; }
-.help ol { padding-left: 20px; margin: 6px 0; }
+.invite-qr { display: block; margin: 4px auto 8px; width: 220px; height: 220px; border-radius: 8px; }
+.btn.line-btn { background: #06c755; border-color: #06c755; color: #fff; }
+.help ol, .help ul { padding-left: 20px; margin: 6px 0; }
 .help li { margin: 4px 0; }
 
 @media (prefers-reduced-motion: no-preference) {

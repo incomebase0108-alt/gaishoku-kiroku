@@ -52,7 +52,7 @@ export function SharedStore() {
 
       {hasLocation(s) && (
         <div style={{ marginTop: 12 }}>
-          <iframe className="map-embed" title={`${s.name}の地図`} src={mapEmbed(s)} loading="lazy" />
+          <iframe className="map-embed" title={`${s.name}の地図`} src={mapEmbed(s)} loading="lazy" sandbox="allow-scripts allow-same-origin allow-popups" />
           <a className="btn block" style={{ marginTop: 8 }} href={mapLink(s, s.name)} target="_blank" rel="noreferrer">
             地図アプリで開く
           </a>

@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { TopBar } from '../components/ui'
 import { db } from '../db/db'
 import { fmtAgo, fmtDateTime } from '../lib/util'
@@ -96,6 +97,16 @@ export function Settings() {
     <div className="page no-sticky">
       <TopBar title="設定" back={false} />
 
+      <h2 className="sec">友だちに教える</h2>
+      <div className="card card-pad">
+        <p className="small" style={{ marginTop: 0 }}>
+          LINE・Instagram・QR コードで食歴を送れます。アプリストアを通さず、リンクを開いて「ホーム画面に追加」するだけで使えます。
+        </p>
+        <Link className="btn primary block" to="/invite" data-testid="open-invite">
+          友だちに食歴を教える
+        </Link>
+      </div>
+
       <h2 className="sec">バックアップ（機種変更のとき）</h2>
       <div className="card card-pad">
         <p className="small" style={{ marginTop: 0 }}>
@@ -182,6 +193,16 @@ export function Settings() {
         <p className="muted" style={{ marginBottom: 0 }}>
           ブラウザのデータを消すと、記録も消えます。
         </p>
+      </div>
+
+      <h2 className="sec">プライバシー</h2>
+      <div className="card card-pad help small">
+        記録と写真はこのスマホの中だけにあり、制作者を含めてだれにも送られません。外に出るのは次のときだけです。
+        <ul>
+          <li>店の位置を使ったとき：市を調べるため、位置（緯度・経度）を OpenStreetMap の住所検索に送ります</li>
+          <li>地図を表示したとき：その場所の地図を OpenStreetMap から読み込みます</li>
+          <li>「店を送る」を使ったとき：店名・市・ジャンル・位置・評価がリンクに入ります（自分のメモと写真は入りません）</li>
+        </ul>
       </div>
 
       <h2 className="sec">このアプリについて</h2>

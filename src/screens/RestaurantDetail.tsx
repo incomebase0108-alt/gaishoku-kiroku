@@ -97,7 +97,7 @@ export function RestaurantDetail() {
       {restaurant.memo && <p className="small pre">{restaurant.memo}</p>}
       {hasLocation(restaurant) && (
         <div style={{ marginTop: 10 }}>
-          <iframe className="map-embed" title={`${restaurant.name}の地図`} src={mapEmbed(restaurant)} loading="lazy" />
+          <iframe className="map-embed" title={`${restaurant.name}の地図`} src={mapEmbed(restaurant)} loading="lazy" sandbox="allow-scripts allow-same-origin allow-popups" />
           <a className="btn block" style={{ marginTop: 8 }} href={mapLink(restaurant, restaurant.name)} target="_blank" rel="noreferrer">
             地図アプリで開く
           </a>

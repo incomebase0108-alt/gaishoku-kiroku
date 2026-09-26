@@ -1,6 +1,6 @@
 /// <reference types="vitest/config" />
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 // 相対パスで出力し、GitHub Pages の /gaishoku-kiroku/ でも手元でも同じ build が動くようにする
@@ -8,11 +8,34 @@ import { VitePWA } from 'vite-plugin-pwa'
 const d = new Date(Date.now() + 9 * 3600 * 1000)
 const VERSION = `${d.getUTCFullYear()}.${d.getUTCMonth() + 1}.${d.getUTCDate()} ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}:${String(d.getUTCSeconds()).padStart(2, '0')}`
 
+// 公開する版だけに CSP を入れる（開発中の自動読み込みは inline の script を使うので入れない）。
+// 読み込んでよいのは自分の中身と、住所検索・地図だけ。
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' blob: data:",
+  "connect-src 'self' https://nominatim.openstreetmap.org",
+  'frame-src https://www.openstreetmap.org',
+  "worker-src 'self'",
+  "manifest-src 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'none'",
+].join('; ')
+const csp: Plugin = {
+  name: 'csp',
+  apply: 'build',
+  transformIndexHtml: (html) => html.replace('<meta charset="UTF-8" />', `<meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="${CSP}" />`),
+}
+
 export default defineConfig({
   base: './',
   define: { __APP_VERSION__: JSON.stringify(VERSION) },
   plugins: [
     react(),
+    csp,
     VitePWA({
       registerType: 'autoUpdate',
       // 新しい版はすぐ使い始め（skipWaiting）、開いているページもすぐ管理下に入れる（clientsClaim）

@@ -5,6 +5,7 @@ import type { Restaurant } from '../domain/types'
 import { newId, norm } from '../lib/util'
 import { listDishSummaries } from '../repositories/restaurantRepo'
 import { byRecent } from '../repositories/visitRepo'
+import { withExternal } from './invite'
 import { hasLocation, mapLink } from './location'
 
 // 店を友だちに送る。中身は URL の中に入れる（サーバーが無いので）。
@@ -110,7 +111,8 @@ export function decodeShared(code: string): SharedStore | null {
 }
 
 export function shareUrl(s: SharedStore, appUrl: string): string {
-  return `${appUrl.split('#')[0]}#/shared?d=${encodeShared(s)}`
+  // LINE で開いたときも Safari / Chrome で開く（アプリ内ブラウザに追加すると自分の食歴に入らない）
+  return withExternal(`${appUrl.split('#')[0]}#/shared?d=${encodeShared(s)}`)
 }
 
 function stars(n: number | null): string {
