@@ -133,7 +133,9 @@ export async function listDishSummaries(restaurantId: string): Promise<DishSumma
       history: list.map((d) => ({ dish: d, visitedAt: vmap.get(d.visit_id)!.v.visited_at })),
     })
   }
-  return out.sort((a, b) => b.lastVisitedAt - a.lastVisitedAt || b.count - a.count)
+  // 新しく食べた順。同じ訪問の料理どうしは登録した順
+  const rank = (s: DishSummary) => vmap.get(s.lastVisitId)!.rank
+  return out.sort((a, b) => rank(a) - rank(b) || a.last.sort_order - b.last.sort_order)
 }
 
 // これまでに入れた市（最近行った店の市から順に）。入力の候補と検索の絞り込みに使う

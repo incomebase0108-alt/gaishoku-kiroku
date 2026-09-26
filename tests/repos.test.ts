@@ -173,6 +173,12 @@ describe('店の一覧と料理のまとめ', () => {
     expect((await listRestaurantSummaries())[0].coverPhotoId).toBe(mid.id)
   })
 
+  it('同じ訪問の料理は登録した順に並ぶ（保存の順番に左右されない）', async () => {
+    const names = ['一', '二', '三', '四', '五']
+    const a = await saveDraft(draft('店', T0, names.map((name) => ({ name }))))
+    expect((await listDishSummaries(a.restaurantId)).map((s) => s.name)).toEqual(names)
+  })
+
   it('同じ料理は品名でまとめ、最新の評価と回数を出す', async () => {
     const a = await saveDraft(draft('店', T0, [{ name: '味噌ラーメン', taste_rating: 3 }]))
     await saveDraft(draft('店', T0 + DAY, [{ name: '味噌 ラーメン', taste_rating: 5, want_again: 'must' }, { name: '餃子' }]))
