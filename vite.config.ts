@@ -4,12 +4,20 @@ import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 // 相対パスで出力し、GitHub Pages の /gaishoku-kiroku/ でも手元でも同じ build が動くようにする
+// 版＝作った日時（日本時間）。設定の画面に出して、スマホに新しい版が届いたかを見分ける
+const d = new Date(Date.now() + 9 * 3600 * 1000)
+const VERSION = `${d.getUTCFullYear()}.${d.getUTCMonth() + 1}.${d.getUTCDate()} ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}:${String(d.getUTCSeconds()).padStart(2, '0')}`
+
 export default defineConfig({
   base: './',
+  define: { __APP_VERSION__: JSON.stringify(VERSION) },
   plugins: [
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // 新しい版はすぐ使い始め（skipWaiting）、開いているページもすぐ管理下に入れる（clientsClaim）
+      workbox: { skipWaiting: true, clientsClaim: true, cleanupOutdatedCaches: true },
+      injectRegister: false, // 登録は src/main.tsx で行う（戻ってきたときに新しい版を確かめるため）
       includeAssets: ['favicon.svg', 'apple-touch-icon-180x180.png'],
       manifest: {
         name: '食歴',

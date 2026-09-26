@@ -187,6 +187,7 @@ export function Settings() {
       <h2 className="sec">このアプリについて</h2>
       <div className="card card-pad small">
         <div style={{ fontWeight: 800, fontSize: 16 }}>{ABOUT.appName}</div>
+        <div className="muted" data-testid="app-version">版 {ABOUT.version}</div>
         <div>
           制作：
           {ABOUT.companyUrl ? (
